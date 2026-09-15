@@ -23,8 +23,15 @@ if __name__ == "__main__":
                         help='List of step3 output directories, each containing resolution_summary.json')
     parser.add_argument('--output-dir', type=str, default='step4_output',
                         help='Output directory for plots')
+    parser.add_argument('--by-etroc', action =  'store_true',
+                        help='Output directory for plots')
+    parser.add_argument('--isolate-etrocs', nargs = '*', default = [],
+                        dest = 'isolated_etroc_nos',
+                        help='Output directory for plots')
+    parser.add_argument('--isolate-module', nargs = '*', default = [],
+                        help='Output directory for plots')
     args = parser.parse_args()
-
+    args.isolate_etrocs = [f'etroc{i}' for i in args.isolated_etroc_nos]
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Collect per-module data across all runs
@@ -32,24 +39,52 @@ if __name__ == "__main__":
     module_data = defaultdict(lambda: {'bv': [], 'mean': [], 'std': [], 'temperature': []})
 
     for d in args.input_dirs:
-        summary_file = os.path.join(d, 'resolution_summary.json')
-        if not os.path.exists(summary_file):
-            print(f"WARNING: {summary_file} not found — skipping")
-            continue
-        with open(summary_file) as f:
-            summary = json.load(f)
-
-        temperature = summary.get('temperature', None)
-
-        for layer in ['i', 'j', 'k']:
-            mod = summary['modules'][layer]
-            if mod['mean_sigma_ps'] is None:
+        if args.by_etroc:
+            possetrocs = [f'etroc{i}' for i in range(4)]
+            etrocs = [f for f in os.listdir(d) if f in possetrocs]
+            if len(etrocs) > 0:
+                print('Found these etrocs:', etrocs)
+                for e in etrocs:
+                    if len(args.isolate_etrocs) > 0 and not e in args.isolate_etrocs:
+                        print(e, args.isolate_etrocs, e in args.isolate_etrocs)
+                        continue 
+                    summary_file = os.path.join(d, e, 'resolution_summary.json')
+                    if not os.path.exists(summary_file):
+                        print(f"WARNING: {summary_file} not found — skipping")
+                        continue
+                    with open(summary_file) as f:
+                        summary = json.load(f)
+                    temperature = summary.get('temperature', None)
+                    for layer in ['i', 'j', 'k']:
+                        mod = summary['modules'][layer]
+                        if mod['mean_sigma_ps'] is None:
+                            continue
+                        name = mod['name']
+                        if len(args.isolate_module) > 0 and not name in args.isolate_module:
+                            continue
+                        module_data[name + '_' + e]['bv'].append(mod['bias_voltage'])
+                        module_data[name + '_' + e]['mean'].append(mod['mean_sigma_ps'])
+                        module_data[name + '_' + e]['std'].append(mod['std_sigma_ps'])
+                        module_data[name + '_' + e]['temperature'].append(temperature)
+        else:
+            summary_file = os.path.join(d, 'resolution_summary.json')
+            if not os.path.exists(summary_file):
+                print(f"WARNING: {summary_file} not found — skipping")
                 continue
-            name = mod['name']
-            module_data[name]['bv'].append(mod['bias_voltage'])
-            module_data[name]['mean'].append(mod['mean_sigma_ps'])
-            module_data[name]['std'].append(mod['std_sigma_ps'])
-            module_data[name]['temperature'].append(temperature)
+            with open(summary_file) as f:
+                summary = json.load(f)
+
+            temperature = summary.get('temperature', None)
+
+            for layer in ['i', 'j', 'k']:
+                mod = summary['modules'][layer]
+                if mod['mean_sigma_ps'] is None:
+                    continue
+                name = mod['name']
+                module_data[name]['bv'].append(mod['bias_voltage'])
+                module_data[name]['mean'].append(mod['mean_sigma_ps'])
+                module_data[name]['std'].append(mod['std_sigma_ps'])
+                module_data[name]['temperature'].append(temperature)
 
     if not module_data:
         print("No valid data found. Exiting.")
@@ -72,7 +107,7 @@ if __name__ == "__main__":
         ax.errorbar(bv, mean, yerr=std,
                     fmt='o-', color=COLORS[idx % len(COLORS)],
                     capsize=4, linewidth=2, markersize=8,
-                    label=module_name)
+                    label=module_name.replace('_etroc', '- ETROC '))
 
     ax.set_xlabel('Bias Voltage (V)')
     ax.set_ylabel(r'$\langle\sigma\rangle$ (ps)')
@@ -108,7 +143,7 @@ if __name__ == "__main__":
             ax.errorbar(temps, means, yerr=stds,
                         fmt='o-', color=COLORS[idx % len(COLORS)],
                         capsize=4, linewidth=2, markersize=8,
-                        label=module_name)
+                        label=module_name.replace('_etroc', '- ETROC '))
 
         ax.set_xlabel('Temperature (°C)')
         ax.set_ylabel(r'$\langle\sigma\rangle$ (ps)')
