@@ -596,6 +596,8 @@ if __name__ == "__main__":
                    help="Use row_global/col_global (range 0..31) instead of row/col "
                         "(range 0..16). Must match what step1/step2 used to produce "
                         "the input sigma_*.json files.")
+    parser.add_argument('--etroc', type=int, default=-1,
+                   help="Along with doGlobal, solve results for a specific ETROC")
 
     args = parser.parse_args()
 
@@ -678,12 +680,64 @@ if __name__ == "__main__":
     sigma_map_i, number_map_i = compute_layer_sigma_map('i', sigma_ij_results, sigma_jk_results, sigma_ki_results)
     sigma_map_j, number_map_j = compute_layer_sigma_map('j', sigma_ij_results, sigma_jk_results, sigma_ki_results)
     sigma_map_k, number_map_k = compute_layer_sigma_map('k', sigma_ij_results, sigma_jk_results, sigma_ki_results)
-
+    if args.etroc == 0:
+        sigma_map_i = sigma_map_i[:16, :16]; number_map_i = number_map_i[:16, :16]
+        sigma_map_j = sigma_map_j[:16, :16]; number_map_j = number_map_j[:16, :16]
+        sigma_map_k = sigma_map_k[:16, :16]; number_map_k = number_map_k[:16, :16]
+        baseline_i = baseline_i[:16, :16]; noise_i = noise_i[:16, :16]
+        baseline_j = baseline_j[:16, :16]; noise_j = noise_j[:16, :16]
+        baseline_k = baseline_k[:16, :16]; noise_k = noise_k[:16, :16]
+    elif args.etroc == 1:
+        sigma_map_i = sigma_map_i[:16, 16:]; number_map_i = number_map_i[:16, 16:]
+        sigma_map_j = sigma_map_j[:16, 16:]; number_map_j = number_map_j[:16, 16:]
+        sigma_map_k = sigma_map_k[:16, 16:]; number_map_k = number_map_k[:16, 16:]
+        baseline_i = baseline_i[:16, 16:]; noise_i = noise_i[:16, 16:]
+        baseline_j = baseline_j[:16, 16:]; noise_j = noise_j[:16, 16:]
+        baseline_k = baseline_k[:16, 16:]; noise_k = noise_k[:16, 16:]
+    elif args.etroc == 2:
+        sigma_map_i = sigma_map_i[16:, :16]; number_map_i = number_map_i[16:, :16]
+        sigma_map_j = sigma_map_j[16:, :16]; number_map_j = number_map_j[16:, :16]
+        sigma_map_k = sigma_map_k[16:, :16]; number_map_k = number_map_k[16:, :16]
+        baseline_i = baseline_i[16:, :16]; noise_i = noise_i[16:, :16]
+        baseline_j = baseline_j[16:, :16]; noise_j = noise_j[16:, :16]
+        baseline_k = baseline_k[16:, :16]; noise_k = noise_k[16:, :16]
+    elif args.etroc == 3:
+        sigma_map_i = sigma_map_i[16:, 16:]; number_map_i = number_map_i[16:, 16:]
+        sigma_map_j = sigma_map_j[16:, 16:]; number_map_j = number_map_j[16:, 16:]
+        sigma_map_k = sigma_map_k[16:, 16:]; number_map_k = number_map_k[16:, 16:]
+        baseline_i = baseline_i[16:, 16:]; noise_i = noise_i[16:, 16:]
+        baseline_j = baseline_j[16:, 16:]; noise_j = noise_j[16:, 16:]
+        baseline_k = baseline_k[16:, 16:]; noise_k = noise_k[16:, 16:]
+    else:
+        print(f'args.etroc set to {args.etroc}. Skipping by etroc separation')
     sigma_map_i_raw = sigma_map_j_raw = sigma_map_k_raw = None
     if HAS_RAW:
         sigma_map_i_raw, _ = compute_layer_sigma_map('i', sigma_ij_results_raw, sigma_jk_results_raw, sigma_ki_results_raw)
         sigma_map_j_raw, _ = compute_layer_sigma_map('j', sigma_ij_results_raw, sigma_jk_results_raw, sigma_ki_results_raw)
         sigma_map_k_raw, _ = compute_layer_sigma_map('k', sigma_ij_results_raw, sigma_jk_results_raw, sigma_ki_results_raw)
+        if args.etroc == 0:
+            sigma_map_i_raw = sigma_map_i_raw[:16, :16]
+            sigma_map_j_raw = sigma_map_j_raw[:16, :16]
+            sigma_map_k_raw = sigma_map_k_raw[:16, :16]
+        elif args.etroc == 1:
+            sigma_map_i_raw = sigma_map_i_raw[:16, 16:]
+            sigma_map_j_raw = sigma_map_j_raw[:16, 16:]
+            sigma_map_k_raw = sigma_map_k_raw[:16, 16:]
+        elif args.etroc == 2:
+            sigma_map_i_raw = sigma_map_i_raw[16:, :16]
+            sigma_map_j_raw = sigma_map_j_raw[16:, :16]
+            sigma_map_k_raw = sigma_map_k_raw[16:, :16]
+        elif args.etroc == 3:
+            sigma_map_i_raw = sigma_map_i_raw[16:, 16:]
+            sigma_map_j_raw = sigma_map_j_raw[16:, 16:]
+            sigma_map_k_raw = sigma_map_k_raw[16:, 16:]
+    if args.etroc in range(4):
+        N_PIX = 16
+        DO_GLOBAL_COORDINATES = False
+        BASE_OUTPUT_DIR += f'/etroc{args.etroc}/'
+        args.output_dir += f'/etroc{args.etroc}/'
+        os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+
 
     mean_i, std_i = plot_resolution_plots(sigma_map_i, info_i, BASE_OUTPUT_DIR, mask=MASK_I, sigma_map_raw=sigma_map_i_raw)
     plot_sigma_vs_log(sigma_map_i, noise_i, baseline_i, BASE_OUTPUT_DIR, 'i')
@@ -708,7 +762,7 @@ if __name__ == "__main__":
         sh = rb_info[rb]
         return {
             'name':          sh['modules'][0]['name'],
-            'bias_voltage':  np.mean([single_run_info[f"module_{sh['modules'][0]['id']}_bias_voltage"] for single_run_info in run_info]), # sh['bias_voltage'],
+            'bias_voltage':  np.mean([single_run_info[f"module_{sh['modules'][0]['id']}_bias_voltage"] for single_run_info in run_info]),
             'mean_sigma_ps': round(float(mean), 2) if not np.isnan(mean) else None,
             'std_sigma_ps':  round(float(std),  2) if not np.isnan(std)  else None,
         }
